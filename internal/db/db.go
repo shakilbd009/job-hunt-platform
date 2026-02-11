@@ -19,9 +19,11 @@ type Store struct {
 }
 
 func NewStore(dbPath string) (*Store, error) {
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("creating data directory: %w", err)
+	if dbPath != ":memory:" {
+		dir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("creating data directory: %w", err)
+		}
 	}
 
 	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?_journal_mode=WAL&_busy_timeout=5000", dbPath))
@@ -138,12 +140,22 @@ func (s *Store) Create(req model.CreateRequest) (*model.Application, error) {
 }
 
 func (s *Store) Update(id string, fields map[string]interface{}) (*model.Application, error) {
-	existing, err := s.Get(id)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var existing model.Application
+	err = tx.QueryRow(
+		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
+		id,
+	).Scan(&existing.ID, &existing.Company, &existing.Role, &existing.URL, &existing.SalaryMin, &existing.SalaryMax, &existing.Location, &existing.Status, &existing.Notes, &existing.AppliedAt, &existing.CreatedAt, &existing.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
-	}
-	if existing == nil {
-		return nil, nil
 	}
 
 	allowed := map[string]string{
@@ -169,7 +181,7 @@ func (s *Store) Update(id string, fields map[string]interface{}) (*model.Applica
 	}
 
 	if len(setClauses) == 0 {
-		return existing, nil
+		return &existing, nil
 	}
 
 	setClauses = append(setClauses, "updated_at = ?")
@@ -178,12 +190,25 @@ func (s *Store) Update(id string, fields map[string]interface{}) (*model.Applica
 	args = append(args, id)
 
 	query := fmt.Sprintf("UPDATE applications SET %s WHERE id = ?", strings.Join(setClauses, ", "))
-	_, err = s.db.Exec(query, args...)
+	_, err = tx.Exec(query, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.Get(id)
+	var updated model.Application
+	err = tx.QueryRow(
+		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
+		id,
+	).Scan(&updated.ID, &updated.Company, &updated.Role, &updated.URL, &updated.SalaryMin, &updated.SalaryMax, &updated.Location, &updated.Status, &updated.Notes, &updated.AppliedAt, &updated.CreatedAt, &updated.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("committing transaction: %w", err)
+	}
+
+	return &updated, nil
 }
 
 func (s *Store) Delete(id string) (bool, error) {
