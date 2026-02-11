@@ -51,6 +51,9 @@ func (r CreateRequest) Validate() error {
 	if r.Status != "" && !ValidStatuses[r.Status] {
 		return fmt.Errorf("invalid status %q, valid values: wishlist, applied, phone_screen, interview, offer, accepted, rejected, withdrawn, ghosted", r.Status)
 	}
+	if r.SalaryMin != nil && r.SalaryMax != nil && *r.SalaryMin > *r.SalaryMax {
+		return fmt.Errorf("salary_min cannot be greater than salary_max")
+	}
 	return nil
 }
 

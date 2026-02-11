@@ -96,6 +96,19 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if minVal, minOk := fields["salary_min"]; minOk {
+		if maxVal, maxOk := fields["salary_max"]; maxOk {
+			if salaryMin, ok := minVal.(float64); ok {
+				if salaryMax, ok := maxVal.(float64); ok {
+					if salaryMin > salaryMax {
+						respondError(w, http.StatusBadRequest, "salary_min cannot be greater than salary_max")
+						return
+					}
+				}
+			}
+		}
+	}
+
 	app, err := h.store.Update(id, fields)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update application")
