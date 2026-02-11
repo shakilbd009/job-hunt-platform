@@ -61,6 +61,7 @@ func TestCreateApplication_Success(t *testing.T) {
 
 	body := `{"company":"Acme Corp","role":"Backend Engineer","status":"applied"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -86,6 +87,7 @@ func TestCreateApplication_DefaultStatus(t *testing.T) {
 
 	body := `{"company":"Acme Corp","role":"Backend Engineer"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -105,6 +107,7 @@ func TestCreateApplication_MissingCompany(t *testing.T) {
 
 	body := `{"role":"Backend Engineer"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -118,6 +121,7 @@ func TestCreateApplication_MissingRole(t *testing.T) {
 
 	body := `{"company":"Acme Corp"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -131,6 +135,7 @@ func TestCreateApplication_InvalidStatus(t *testing.T) {
 
 	body := `{"company":"Acme Corp","role":"Engineer","status":"invalid"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -145,6 +150,7 @@ func TestGetApplication_Success(t *testing.T) {
 	// Create first
 	body := `{"company":"Acme Corp","role":"Engineer"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -185,6 +191,7 @@ func TestUpdateApplication_Success(t *testing.T) {
 	// Create
 	body := `{"company":"Acme Corp","role":"Engineer"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -194,6 +201,7 @@ func TestUpdateApplication_Success(t *testing.T) {
 	// Update
 	update := `{"status":"applied","notes":"Submitted resume"}`
 	req = httptest.NewRequest(http.MethodPut, "/applications/"+created.ID, bytes.NewBufferString(update))
+	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -216,6 +224,7 @@ func TestUpdateApplication_NotFound(t *testing.T) {
 
 	body := `{"status":"applied"}`
 	req := httptest.NewRequest(http.MethodPut, "/applications/nonexistent", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -230,6 +239,7 @@ func TestUpdateApplication_InvalidStatus(t *testing.T) {
 	// Create
 	body := `{"company":"Acme Corp","role":"Engineer"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -239,6 +249,7 @@ func TestUpdateApplication_InvalidStatus(t *testing.T) {
 	// Update with invalid status
 	update := `{"status":"invalid"}`
 	req = httptest.NewRequest(http.MethodPut, "/applications/"+created.ID, bytes.NewBufferString(update))
+	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -253,6 +264,7 @@ func TestDeleteApplication_Success(t *testing.T) {
 	// Create
 	body := `{"company":"Acme Corp","role":"Engineer"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -296,11 +308,13 @@ func TestListApplications_FilterByStatus(t *testing.T) {
 	// Create two apps with different statuses
 	body1 := `{"company":"Acme","role":"Eng","status":"applied"}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body1))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	body2 := `{"company":"Beta","role":"Eng","status":"interview"}`
 	req = httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body2))
+	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -343,6 +357,7 @@ func TestCreateApplication_WithSalary(t *testing.T) {
 
 	body := `{"company":"Acme Corp","role":"Engineer","salary_min":150000,"salary_max":200000}`
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -364,6 +379,7 @@ func TestCreateApplication_InvalidJSON(t *testing.T) {
 	_, r := setupTest(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString("not json"))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -463,5 +479,54 @@ func TestListApplications_NegativeOffset(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCreateApplication_OversizedBody(t *testing.T) {
+	_, r := setupTest(t)
+
+	// Build valid JSON that exceeds 1MB limit
+	prefix := []byte(`{"company":"`)
+	padding := bytes.Repeat([]byte("a"), 1<<20+1)
+	suffix := []byte(`","role":"Eng"}`)
+	body := make([]byte, 0, len(prefix)+len(padding)+len(suffix))
+	body = append(body, prefix...)
+	body = append(body, padding...)
+	body = append(body, suffix...)
+
+	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateApplication_MissingContentType(t *testing.T) {
+	_, r := setupTest(t)
+
+	body := `{"company":"Acme Corp","role":"Engineer"}`
+	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected 415, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateApplication_WrongContentType(t *testing.T) {
+	_, r := setupTest(t)
+
+	body := `{"company":"Acme Corp","role":"Engineer"}`
+	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "text/plain")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected 415, got %d: %s", w.Code, w.Body.String())
 	}
 }

@@ -2,8 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -31,7 +34,21 @@ func New(store *db.Store) *Handler {
 	return &Handler{store: store}
 }
 
+func requireJSON(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut {
+			ct := r.Header.Get("Content-Type")
+			if !strings.HasPrefix(ct, "application/json") {
+				respondError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (h *Handler) Routes(r chi.Router) {
+	r.Use(requireJSON)
 	r.Get("/applications", h.ListApplications)
 	r.Get("/applications/{id}", h.GetApplication)
 	r.Post("/applications", h.CreateApplication)
@@ -114,8 +131,14 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req model.CreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			respondError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
 		respondError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -136,8 +159,14 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var fields map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			respondError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
 		respondError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -196,7 +225,9 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("failed to encode response: %v", err)
+	}
 }
 
 func respondError(w http.ResponseWriter, status int, message string) {
