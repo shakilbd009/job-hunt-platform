@@ -11,6 +11,8 @@ import (
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
 )
 
+const maxBodyBytes = 1 << 20 // 1 MB
+
 type PaginatedResponse struct {
 	Data       []model.Application `json:"data"`
 	Pagination PaginationMeta      `json:"pagination"`
@@ -31,11 +33,20 @@ func New(store *db.Store) *Handler {
 	return &Handler{store: store}
 }
 
+func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/applications", h.ListApplications)
 	r.Get("/applications/{id}", h.GetApplication)
-	r.Post("/applications", h.CreateApplication)
-	r.Put("/applications/{id}", h.UpdateApplication)
+	r.With(maxBodyMiddleware(maxBodyBytes)).Post("/applications", h.CreateApplication)
+	r.With(maxBodyMiddleware(maxBodyBytes)).Put("/applications/{id}", h.UpdateApplication)
 	r.Delete("/applications/{id}", h.DeleteApplication)
 }
 
