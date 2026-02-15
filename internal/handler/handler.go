@@ -76,13 +76,13 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 		offset = n
 	}
 
-	apps, err := h.store.List(status, limit, offset)
+	apps, err := h.store.List(r.Context(), status, limit, offset)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to list applications")
 		return
 	}
 
-	total, err := h.store.Count(status)
+	total, err := h.store.Count(r.Context(), status)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to count applications")
 		return
@@ -101,7 +101,7 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	app, err := h.store.Get(id)
+	app, err := h.store.Get(r.Context(), id)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to get application")
 		return
@@ -124,7 +124,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := h.store.Create(req)
+	app, err := h.store.Create(r.Context(), req)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to create application")
 		return
@@ -164,7 +164,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	app, err := h.store.Update(id, fields)
+	app, err := h.store.Update(r.Context(), id, fields)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update application")
 		return
@@ -180,7 +180,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	deleted, err := h.store.Delete(id)
+	deleted, err := h.store.Delete(r.Context(), id)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to delete application")
 		return
