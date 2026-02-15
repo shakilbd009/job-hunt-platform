@@ -1,10 +1,13 @@
 package db
 
 import (
+	"context"
 	"testing"
 
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
 )
+
+var ctx = context.Background()
 
 func setupTestStore(t *testing.T) *Store {
 	t.Helper()
@@ -18,7 +21,7 @@ func setupTestStore(t *testing.T) *Store {
 
 func createTestApp(t *testing.T, store *Store) *model.Application {
 	t.Helper()
-	app, err := store.Create(model.CreateRequest{
+	app, err := store.Create(ctx, model.CreateRequest{
 		Company: "TestCo",
 		Role:    "Engineer",
 	})
@@ -32,7 +35,7 @@ func TestCreateHappyPath(t *testing.T) {
 	store := setupTestStore(t)
 
 	min, max := 100000, 200000
-	app, err := store.Create(model.CreateRequest{
+	app, err := store.Create(ctx, model.CreateRequest{
 		Company:   "Acme",
 		Role:      "SRE",
 		URL:       "https://acme.com/jobs/1",
@@ -66,7 +69,7 @@ func TestCreateHappyPath(t *testing.T) {
 func TestCreateDefaultStatus(t *testing.T) {
 	store := setupTestStore(t)
 
-	app, err := store.Create(model.CreateRequest{
+	app, err := store.Create(ctx, model.CreateRequest{
 		Company: "DefaultCo",
 		Role:    "Dev",
 	})
@@ -82,7 +85,7 @@ func TestGetExisting(t *testing.T) {
 	store := setupTestStore(t)
 	created := createTestApp(t, store)
 
-	got, err := store.Get(created.ID)
+	got, err := store.Get(ctx,created.ID)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -97,7 +100,7 @@ func TestGetExisting(t *testing.T) {
 func TestGetNonExistent(t *testing.T) {
 	store := setupTestStore(t)
 
-	got, err := store.Get("nonexistent")
+	got, err := store.Get(ctx,"nonexistent")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -111,7 +114,7 @@ func TestListAll(t *testing.T) {
 	createTestApp(t, store)
 	createTestApp(t, store)
 
-	apps, err := store.List("", 100, 0)
+	apps, err := store.List(ctx,"", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -123,7 +126,7 @@ func TestListAll(t *testing.T) {
 func TestListEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	apps, err := store.List("", 100, 0)
+	apps, err := store.List(ctx,"", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -135,11 +138,11 @@ func TestListEmpty(t *testing.T) {
 func TestListWithStatusFilter(t *testing.T) {
 	store := setupTestStore(t)
 
-	store.Create(model.CreateRequest{Company: "A", Role: "R", Status: "applied"})
-	store.Create(model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
-	store.Create(model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", Status: "applied"})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
 
-	apps, err := store.List("applied", 100, 0)
+	apps, err := store.List(ctx,"applied", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -152,7 +155,7 @@ func TestListInvalidStatusFilter(t *testing.T) {
 	store := setupTestStore(t)
 	createTestApp(t, store)
 
-	apps, err := store.List("nonexistent_status", 100, 0)
+	apps, err := store.List(ctx,"nonexistent_status", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -165,7 +168,7 @@ func TestUpdateSingleField(t *testing.T) {
 	store := setupTestStore(t)
 	created := createTestApp(t, store)
 
-	updated, err := store.Update(created.ID, map[string]interface{}{
+	updated, err := store.Update(ctx,created.ID, map[string]interface{}{
 		"company": "NewCo",
 	})
 	if err != nil {
@@ -183,7 +186,7 @@ func TestUpdateMultipleFields(t *testing.T) {
 	store := setupTestStore(t)
 	created := createTestApp(t, store)
 
-	updated, err := store.Update(created.ID, map[string]interface{}{
+	updated, err := store.Update(ctx,created.ID, map[string]interface{}{
 		"company":  "BigCo",
 		"role":     "Senior Engineer",
 		"location": "NYC",
@@ -205,7 +208,7 @@ func TestUpdateMultipleFields(t *testing.T) {
 func TestUpdateNonExistent(t *testing.T) {
 	store := setupTestStore(t)
 
-	result, err := store.Update("nonexistent", map[string]interface{}{
+	result, err := store.Update(ctx,"nonexistent", map[string]interface{}{
 		"company": "X",
 	})
 	if err != nil {
@@ -220,7 +223,7 @@ func TestUpdateEmptyBody(t *testing.T) {
 	store := setupTestStore(t)
 	created := createTestApp(t, store)
 
-	result, err := store.Update(created.ID, map[string]interface{}{})
+	result, err := store.Update(ctx,created.ID, map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
@@ -236,7 +239,7 @@ func TestDeleteExisting(t *testing.T) {
 	store := setupTestStore(t)
 	created := createTestApp(t, store)
 
-	deleted, err := store.Delete(created.ID)
+	deleted, err := store.Delete(ctx,created.ID)
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
@@ -244,7 +247,7 @@ func TestDeleteExisting(t *testing.T) {
 		t.Fatal("expected deleted=true")
 	}
 
-	got, err := store.Get(created.ID)
+	got, err := store.Get(ctx,created.ID)
 	if err != nil {
 		t.Fatalf("Get after delete failed: %v", err)
 	}
@@ -256,7 +259,7 @@ func TestDeleteExisting(t *testing.T) {
 func TestDeleteNonExistent(t *testing.T) {
 	store := setupTestStore(t)
 
-	deleted, err := store.Delete("nonexistent")
+	deleted, err := store.Delete(ctx,"nonexistent")
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
@@ -269,7 +272,7 @@ func TestUpdateSalaryFields(t *testing.T) {
 	store := setupTestStore(t)
 	created := createTestApp(t, store)
 
-	updated, err := store.Update(created.ID, map[string]interface{}{
+	updated, err := store.Update(ctx,created.ID, map[string]interface{}{
 		"salary_min": float64(80000),
 		"salary_max": float64(120000),
 	})
@@ -290,7 +293,7 @@ func TestCountAll(t *testing.T) {
 	createTestApp(t, store)
 	createTestApp(t, store)
 
-	count, err := store.Count("")
+	count, err := store.Count(ctx,"")
 	if err != nil {
 		t.Fatalf("Count failed: %v", err)
 	}
@@ -302,11 +305,11 @@ func TestCountAll(t *testing.T) {
 func TestCountWithStatus(t *testing.T) {
 	store := setupTestStore(t)
 
-	store.Create(model.CreateRequest{Company: "A", Role: "R", Status: "applied"})
-	store.Create(model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
-	store.Create(model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", Status: "applied"})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
 
-	count, err := store.Count("applied")
+	count, err := store.Count(ctx,"applied")
 	if err != nil {
 		t.Fatalf("Count failed: %v", err)
 	}
@@ -318,7 +321,7 @@ func TestCountWithStatus(t *testing.T) {
 func TestCountEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	count, err := store.Count("")
+	count, err := store.Count(ctx,"")
 	if err != nil {
 		t.Fatalf("Count failed: %v", err)
 	}
@@ -330,11 +333,11 @@ func TestCountEmpty(t *testing.T) {
 func TestListPagination(t *testing.T) {
 	store := setupTestStore(t)
 	for i := 0; i < 5; i++ {
-		store.Create(model.CreateRequest{Company: "Co", Role: "R"})
+		store.Create(ctx, model.CreateRequest{Company: "Co", Role: "R"})
 	}
 
 	// First page
-	apps, err := store.List("", 2, 0)
+	apps, err := store.List(ctx,"", 2, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -343,7 +346,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	// Second page
-	apps, err = store.List("", 2, 2)
+	apps, err = store.List(ctx,"", 2, 2)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -352,7 +355,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	// Last page (partial)
-	apps, err = store.List("", 2, 4)
+	apps, err = store.List(ctx,"", 2, 4)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -361,7 +364,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	// Beyond range
-	apps, err = store.List("", 2, 10)
+	apps, err = store.List(ctx,"", 2, 10)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -65,7 +66,7 @@ func generateID() string {
 	return uuid.New().String()[:8]
 }
 
-func (s *Store) Count(status string) (int, error) {
+func (s *Store) Count(ctx context.Context, status string) (int, error) {
 	query := "SELECT COUNT(*) FROM applications"
 	var args []interface{}
 
@@ -75,14 +76,14 @@ func (s *Store) Count(status string) (int, error) {
 	}
 
 	var count int
-	err := s.db.QueryRow(query, args...).Scan(&count)
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
-func (s *Store) List(status string, limit, offset int) ([]model.Application, error) {
+func (s *Store) List(ctx context.Context, status string, limit, offset int) ([]model.Application, error) {
 	query := "SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications"
 	var args []interface{}
 
@@ -93,7 +94,7 @@ func (s *Store) List(status string, limit, offset int) ([]model.Application, err
 	query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,9 +114,9 @@ func (s *Store) List(status string, limit, offset int) ([]model.Application, err
 	return apps, rows.Err()
 }
 
-func (s *Store) Get(id string) (*model.Application, error) {
+func (s *Store) Get(ctx context.Context, id string) (*model.Application, error) {
 	var a model.Application
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(ctx,
 		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
 		id,
 	).Scan(&a.ID, &a.Company, &a.Role, &a.URL, &a.SalaryMin, &a.SalaryMax, &a.Location, &a.Status, &a.Notes, &a.AppliedAt, &a.CreatedAt, &a.UpdatedAt)
@@ -128,7 +129,7 @@ func (s *Store) Get(id string) (*model.Application, error) {
 	return &a, nil
 }
 
-func (s *Store) Create(req model.CreateRequest) (*model.Application, error) {
+func (s *Store) Create(ctx context.Context, req model.CreateRequest) (*model.Application, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	id := generateID()
 
@@ -146,7 +147,7 @@ func (s *Store) Create(req model.CreateRequest) (*model.Application, error) {
 		salaryMax = *req.SalaryMax
 	}
 
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(ctx,
 		"INSERT INTO applications (id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		id, req.Company, req.Role, req.URL, salaryMin, salaryMax, req.Location, status, req.Notes, req.AppliedAt, now, now,
 	)
@@ -154,18 +155,18 @@ func (s *Store) Create(req model.CreateRequest) (*model.Application, error) {
 		return nil, err
 	}
 
-	return s.Get(id)
+	return s.Get(ctx, id)
 }
 
-func (s *Store) Update(id string, fields map[string]interface{}) (*model.Application, error) {
-	tx, err := s.db.Begin()
+func (s *Store) Update(ctx context.Context, id string, fields map[string]interface{}) (*model.Application, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("beginning transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	var existing model.Application
-	err = tx.QueryRow(
+	err = tx.QueryRowContext(ctx,
 		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
 		id,
 	).Scan(&existing.ID, &existing.Company, &existing.Role, &existing.URL, &existing.SalaryMin, &existing.SalaryMax, &existing.Location, &existing.Status, &existing.Notes, &existing.AppliedAt, &existing.CreatedAt, &existing.UpdatedAt)
@@ -208,13 +209,13 @@ func (s *Store) Update(id string, fields map[string]interface{}) (*model.Applica
 	args = append(args, id)
 
 	query := fmt.Sprintf("UPDATE applications SET %s WHERE id = ?", strings.Join(setClauses, ", "))
-	_, err = tx.Exec(query, args...)
+	_, err = tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 
 	var updated model.Application
-	err = tx.QueryRow(
+	err = tx.QueryRowContext(ctx,
 		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
 		id,
 	).Scan(&updated.ID, &updated.Company, &updated.Role, &updated.URL, &updated.SalaryMin, &updated.SalaryMax, &updated.Location, &updated.Status, &updated.Notes, &updated.AppliedAt, &updated.CreatedAt, &updated.UpdatedAt)
@@ -229,8 +230,8 @@ func (s *Store) Update(id string, fields map[string]interface{}) (*model.Applica
 	return &updated, nil
 }
 
-func (s *Store) Delete(id string) (bool, error) {
-	res, err := s.db.Exec("DELETE FROM applications WHERE id = ?", id)
+func (s *Store) Delete(ctx context.Context, id string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM applications WHERE id = ?", id)
 	if err != nil {
 		return false, err
 	}
