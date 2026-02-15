@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,12 @@ import (
 	"github.com/shakilbd009/job-hunt-platform/internal/db"
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
 )
+
+var validIDRegex = regexp.MustCompile(`^[0-9a-f]{8}$`)
+
+func isValidID(id string) bool {
+	return validIDRegex.MatchString(id)
+}
 
 type PaginatedResponse struct {
 	Data       []model.Application `json:"data"`
@@ -129,6 +136,10 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isValidID(id) {
+		respondError(w, http.StatusBadRequest, "invalid application ID format")
+		return
+	}
 	app, err := h.store.Get(r.Context(), id)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to get application")
@@ -169,6 +180,10 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isValidID(id) {
+		respondError(w, http.StatusBadRequest, "invalid application ID format")
+		return
+	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var fields map[string]interface{}
@@ -219,6 +234,10 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isValidID(id) {
+		respondError(w, http.StatusBadRequest, "invalid application ID format")
+		return
+	}
 
 	deleted, err := h.store.Delete(r.Context(), id)
 	if err != nil {

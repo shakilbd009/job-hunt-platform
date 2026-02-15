@@ -32,6 +32,10 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
 	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("running migrations: %w", err)
