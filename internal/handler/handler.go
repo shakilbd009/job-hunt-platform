@@ -3,12 +3,19 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/shakilbd009/job-hunt-platform/internal/db"
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
 )
+
+var validIDRegex = regexp.MustCompile(`^[0-9a-f]{8}$`)
+
+func isValidID(id string) bool {
+	return validIDRegex.MatchString(id)
+}
 
 type Handler struct {
 	store *db.Store
@@ -46,6 +53,10 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isValidID(id) {
+		respondError(w, http.StatusBadRequest, "invalid application ID format")
+		return
+	}
 	app, err := h.store.Get(id)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to get application")
@@ -80,6 +91,10 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isValidID(id) {
+		respondError(w, http.StatusBadRequest, "invalid application ID format")
+		return
+	}
 
 	var fields map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
@@ -124,6 +139,10 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isValidID(id) {
+		respondError(w, http.StatusBadRequest, "invalid application ID format")
+		return
+	}
 
 	deleted, err := h.store.Delete(id)
 	if err != nil {
