@@ -465,3 +465,74 @@ func TestListApplications_NegativeOffset(t *testing.T) {
 		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
+
+func TestListApplications_OffsetBeyondTotal(t *testing.T) {
+	_, r := setupTest(t)
+
+	// Create 3 apps
+	for _, company := range []string{"A", "B", "C"} {
+		body := `{"company":"` + company + `","role":"Eng"}`
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?offset=999", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 0 {
+		t.Fatalf("expected 0 items, got %d", len(resp.Data))
+	}
+	if resp.Pagination.Total != 3 {
+		t.Fatalf("expected total 3, got %d", resp.Pagination.Total)
+	}
+	if resp.Pagination.HasMore {
+		t.Fatal("expected has_more=false")
+	}
+}
+
+func TestListApplications_StatusFilterWithPagination(t *testing.T) {
+	_, r := setupTest(t)
+
+	// Create 5 apps: 3 applied, 2 interview
+	for _, company := range []string{"A", "B", "C"} {
+		body := `{"company":"` + company + `","role":"Eng","status":"applied"}`
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+	for _, company := range []string{"D", "E"} {
+		body := `{"company":"` + company + `","role":"Eng","status":"interview"}`
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	// Filter by applied with limit=1
+	req := httptest.NewRequest(http.MethodGet, "/applications?status=applied&limit=1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(resp.Data))
+	}
+	if resp.Pagination.Total != 3 {
+		t.Fatalf("expected total 3 (filtered count, not 5), got %d", resp.Pagination.Total)
+	}
+	if !resp.Pagination.HasMore {
+		t.Fatal("expected has_more=true (3 total, 1 returned)")
+	}
+}
