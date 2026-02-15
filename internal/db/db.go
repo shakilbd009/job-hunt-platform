@@ -65,7 +65,24 @@ func generateID() string {
 	return uuid.New().String()[:8]
 }
 
-func (s *Store) List(status string) ([]model.Application, error) {
+func (s *Store) Count(status string) (int, error) {
+	query := "SELECT COUNT(*) FROM applications"
+	var args []interface{}
+
+	if status != "" {
+		query += " WHERE status = ?"
+		args = append(args, status)
+	}
+
+	var count int
+	err := s.db.QueryRow(query, args...).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (s *Store) List(status string, limit, offset int) ([]model.Application, error) {
 	query := "SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications"
 	var args []interface{}
 
@@ -73,7 +90,8 @@ func (s *Store) List(status string) ([]model.Application, error) {
 		query += " WHERE status = ?"
 		args = append(args, status)
 	}
-	query += " ORDER BY updated_at DESC"
+	query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {

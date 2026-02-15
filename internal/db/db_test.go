@@ -111,7 +111,7 @@ func TestListAll(t *testing.T) {
 	createTestApp(t, store)
 	createTestApp(t, store)
 
-	apps, err := store.List("")
+	apps, err := store.List("", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestListAll(t *testing.T) {
 func TestListEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	apps, err := store.List("")
+	apps, err := store.List("", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestListWithStatusFilter(t *testing.T) {
 	store.Create(model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
 	store.Create(model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
 
-	apps, err := store.List("applied")
+	apps, err := store.List("applied", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestListInvalidStatusFilter(t *testing.T) {
 	store := setupTestStore(t)
 	createTestApp(t, store)
 
-	apps, err := store.List("nonexistent_status")
+	apps, err := store.List("nonexistent_status", 100, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -281,5 +281,91 @@ func TestUpdateSalaryFields(t *testing.T) {
 	}
 	if updated.SalaryMax != 120000 {
 		t.Fatalf("expected salary_max 120000, got %d", updated.SalaryMax)
+	}
+}
+
+func TestCountAll(t *testing.T) {
+	store := setupTestStore(t)
+	createTestApp(t, store)
+	createTestApp(t, store)
+	createTestApp(t, store)
+
+	count, err := store.Count("")
+	if err != nil {
+		t.Fatalf("Count failed: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("expected count 3, got %d", count)
+	}
+}
+
+func TestCountWithStatus(t *testing.T) {
+	store := setupTestStore(t)
+
+	store.Create(model.CreateRequest{Company: "A", Role: "R", Status: "applied"})
+	store.Create(model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
+	store.Create(model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
+
+	count, err := store.Count("applied")
+	if err != nil {
+		t.Fatalf("Count failed: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected count 2, got %d", count)
+	}
+}
+
+func TestCountEmpty(t *testing.T) {
+	store := setupTestStore(t)
+
+	count, err := store.Count("")
+	if err != nil {
+		t.Fatalf("Count failed: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected count 0, got %d", count)
+	}
+}
+
+func TestListPagination(t *testing.T) {
+	store := setupTestStore(t)
+	for i := 0; i < 5; i++ {
+		store.Create(model.CreateRequest{Company: "Co", Role: "R"})
+	}
+
+	// First page
+	apps, err := store.List("", 2, 0)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps, got %d", len(apps))
+	}
+
+	// Second page
+	apps, err = store.List("", 2, 2)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps, got %d", len(apps))
+	}
+
+	// Last page (partial)
+	apps, err = store.List("", 2, 4)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 1 {
+		t.Fatalf("expected 1 app, got %d", len(apps))
+	}
+
+	// Beyond range
+	apps, err = store.List("", 2, 10)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 0 {
+		t.Fatalf("expected 0 apps, got %d", len(apps))
 	}
 }

@@ -3,12 +3,25 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/shakilbd009/job-hunt-platform/internal/db"
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
 )
+
+type PaginatedResponse struct {
+	Data       []model.Application `json:"data"`
+	Pagination PaginationMeta      `json:"pagination"`
+}
+
+type PaginationMeta struct {
+	Total   int  `json:"total"`
+	Limit   int  `json:"limit"`
+	Offset  int  `json:"offset"`
+	HasMore bool `json:"has_more"`
+}
 
 type Handler struct {
 	store *db.Store
@@ -35,13 +48,55 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	apps, err := h.store.List(status)
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid limit parameter")
+			return
+		}
+		if n < 1 || n > 500 {
+			respondError(w, http.StatusBadRequest, "limit must be between 1 and 500")
+			return
+		}
+		limit = n
+	}
+
+	offset := 0
+	if v := r.URL.Query().Get("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid offset parameter")
+			return
+		}
+		if n < 0 {
+			respondError(w, http.StatusBadRequest, "offset must be non-negative")
+			return
+		}
+		offset = n
+	}
+
+	apps, err := h.store.List(status, limit, offset)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to list applications")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, apps)
+	total, err := h.store.Count(status)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to count applications")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, PaginatedResponse{
+		Data: apps,
+		Pagination: PaginationMeta{
+			Total:   total,
+			Limit:   limit,
+			Offset:  offset,
+			HasMore: offset+len(apps) < total,
+		},
+	})
 }
 
 func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
