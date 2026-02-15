@@ -15,8 +15,20 @@ import (
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
 )
 
+const applicationColumns = "id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at"
+
+type scanner interface {
+	Scan(dest ...any) error
+}
+
 type Store struct {
 	db *sql.DB
+}
+
+func scanApplication(row scanner) (model.Application, error) {
+	var a model.Application
+	err := row.Scan(&a.ID, &a.Company, &a.Role, &a.URL, &a.SalaryMin, &a.SalaryMax, &a.Location, &a.Status, &a.Notes, &a.AppliedAt, &a.CreatedAt, &a.UpdatedAt)
+	return a, err
 }
 
 func NewStore(dbPath string) (*Store, error) {
@@ -133,7 +145,7 @@ func (s *Store) Count(ctx context.Context, opts model.ListOptions) (int, error) 
 }
 
 func (s *Store) List(ctx context.Context, opts model.ListOptions) ([]model.Application, error) {
-	query := "SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications"
+	query := "SELECT " + applicationColumns + " FROM applications"
 	whereClause, args := buildWhere(opts)
 	if whereClause != "" {
 		query += " " + whereClause
@@ -161,8 +173,8 @@ func (s *Store) List(ctx context.Context, opts model.ListOptions) ([]model.Appli
 
 	var apps []model.Application
 	for rows.Next() {
-		var a model.Application
-		if err := rows.Scan(&a.ID, &a.Company, &a.Role, &a.URL, &a.SalaryMin, &a.SalaryMax, &a.Location, &a.Status, &a.Notes, &a.AppliedAt, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		a, err := scanApplication(rows)
+		if err != nil {
 			return nil, err
 		}
 		apps = append(apps, a)
@@ -174,11 +186,7 @@ func (s *Store) List(ctx context.Context, opts model.ListOptions) ([]model.Appli
 }
 
 func (s *Store) Get(ctx context.Context, id string) (*model.Application, error) {
-	var a model.Application
-	err := s.db.QueryRowContext(ctx,
-		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
-		id,
-	).Scan(&a.ID, &a.Company, &a.Role, &a.URL, &a.SalaryMin, &a.SalaryMax, &a.Location, &a.Status, &a.Notes, &a.AppliedAt, &a.CreatedAt, &a.UpdatedAt)
+	a, err := scanApplication(s.db.QueryRowContext(ctx, "SELECT "+applicationColumns+" FROM applications WHERE id = ?", id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -224,11 +232,7 @@ func (s *Store) Update(ctx context.Context, id string, fields map[string]interfa
 	}
 	defer tx.Rollback()
 
-	var existing model.Application
-	err = tx.QueryRowContext(ctx,
-		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
-		id,
-	).Scan(&existing.ID, &existing.Company, &existing.Role, &existing.URL, &existing.SalaryMin, &existing.SalaryMax, &existing.Location, &existing.Status, &existing.Notes, &existing.AppliedAt, &existing.CreatedAt, &existing.UpdatedAt)
+	existing, err := scanApplication(tx.QueryRowContext(ctx, "SELECT "+applicationColumns+" FROM applications WHERE id = ?", id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -273,11 +277,7 @@ func (s *Store) Update(ctx context.Context, id string, fields map[string]interfa
 		return nil, err
 	}
 
-	var updated model.Application
-	err = tx.QueryRowContext(ctx,
-		"SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications WHERE id = ?",
-		id,
-	).Scan(&updated.ID, &updated.Company, &updated.Role, &updated.URL, &updated.SalaryMin, &updated.SalaryMax, &updated.Location, &updated.Status, &updated.Notes, &updated.AppliedAt, &updated.CreatedAt, &updated.UpdatedAt)
+	updated, err := scanApplication(tx.QueryRowContext(ctx, "SELECT "+applicationColumns+" FROM applications WHERE id = ?", id))
 	if err != nil {
 		return nil, err
 	}

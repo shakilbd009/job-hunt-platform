@@ -21,6 +21,8 @@ func isValidID(id string) bool {
 	return validIDRegex.MatchString(id)
 }
 
+const maxBodyBytes = 1 << 20 // 1 MB
+
 type PaginatedResponse struct {
 	Data       []model.Application `json:"data"`
 	Pagination PaginationMeta      `json:"pagination"`
@@ -54,8 +56,28 @@ func requireJSON(next http.Handler) http.Handler {
 	})
 }
 
+func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func (h *Handler) HealthRoutes(r chi.Router) {
 	r.Get("/health", h.HealthCheck)
+}
+
+func (h *Handler) Routes(r chi.Router) {
+	r.Use(requireJSON)
+	r.Get("/applications", h.ListApplications)
+	// Must be before {id} to avoid chi matching "stats" as an ID
+	r.Get("/applications/stats", h.GetStats)
+	r.Get("/applications/{id}", h.GetApplication)
+	r.With(maxBodyMiddleware(maxBodyBytes)).Post("/applications", h.CreateApplication)
+	r.With(maxBodyMiddleware(maxBodyBytes)).Put("/applications/{id}", h.UpdateApplication)
+	r.Delete("/applications/{id}", h.DeleteApplication)
 }
 
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +202,6 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req model.CreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
@@ -212,7 +233,6 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var fields map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
 		var maxBytesErr *http.MaxBytesError
