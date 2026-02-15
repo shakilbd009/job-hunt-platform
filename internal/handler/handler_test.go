@@ -2,10 +2,12 @@ package handler_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -463,5 +465,83 @@ func TestListApplications_NegativeOffset(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestMalformedIDs(t *testing.T) {
+	h, _ := setupTest(t)
+
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{"too-long", strings.Repeat("a", 200)},
+		{"sql-injection", "'; DROP TABLE applications;--"},
+		{"unicode-emoji", "🎉emoji🎉"},
+		{"has-spaces", "has spaces"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/applications/x", nil)
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("id", tc.id)
+			ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+			req = req.WithContext(ctx)
+			w := httptest.NewRecorder()
+			h.GetApplication(w, req)
+
+			if w.Code != http.StatusBadRequest && w.Code != http.StatusNotFound {
+				t.Fatalf("expected 400 or 404, got %d", w.Code)
+			}
+		})
+	}
+}
+
+func TestOversizedPayload(t *testing.T) {
+	_, r := setupTest(t)
+
+	// Build a payload well over 1MB limit — use role field to push total over
+	bigBody := `{"company":"Acme","role":"` + strings.Repeat("x", 2*1024*1024) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/applications", strings.NewReader(bigBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge && w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 413 or 400 for oversized body, got %d", w.Code)
+	}
+}
+
+func TestInvalidContentTypePUT(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodPut, "/applications/testid", bytes.NewBufferString("this is not json"))
+	req.Header.Set("Content-Type", "text/plain")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnsupportedMediaType && w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 415 or 400 for invalid content type, got %d", w.Code)
+	}
+}
+
+func TestEmptyJSONBody(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString("{}"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty JSON body, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+	if errMsg, ok := resp["error"]; ok {
+		if !strings.Contains(strings.ToLower(errMsg), "company") {
+			t.Errorf("expected error to mention 'company', got %q", errMsg)
+		}
 	}
 }

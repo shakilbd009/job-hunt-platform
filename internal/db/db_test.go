@@ -1,6 +1,9 @@
 package db
 
 import (
+	"fmt"
+	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
@@ -367,5 +370,119 @@ func TestListPagination(t *testing.T) {
 	}
 	if len(apps) != 0 {
 		t.Fatalf("expected 0 apps, got %d", len(apps))
+	}
+}
+
+func setupFileStore(t *testing.T) *Store {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create file-based store: %v", err)
+	}
+	// Serialize writes through single connection — SQLite is single-writer.
+	// This tests concurrent Go goroutines safely accessing the store.
+	store.db.SetMaxOpenConns(1)
+	t.Cleanup(func() { store.Close() })
+	return store
+}
+
+func TestConcurrentCreate(t *testing.T) {
+	store := setupFileStore(t)
+
+	const n = 10
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	wg.Add(n)
+
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			_, err := store.Create(model.CreateRequest{
+				Company: fmt.Sprintf("Co-%d", i),
+				Role:    "Eng",
+			})
+			errs <- err
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent Create failed: %v", err)
+		}
+	}
+
+	apps, err := store.List("", 100, 0)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != n {
+		t.Fatalf("expected %d apps, got %d", n, len(apps))
+	}
+}
+
+func TestConcurrentUpdateSameRecord(t *testing.T) {
+	store := setupFileStore(t)
+
+	app, err := store.Create(model.CreateRequest{Company: "ConcCo", Role: "Eng"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	updates := []map[string]interface{}{
+		{"status": "applied"},
+		{"notes": "updated"},
+		{"location": "NYC"},
+		{"url": "https://example.com"},
+		{"salary_min": float64(100000)},
+	}
+
+	errs := make(chan error, len(updates))
+	var wg sync.WaitGroup
+	wg.Add(len(updates))
+
+	for _, u := range updates {
+		go func(fields map[string]interface{}) {
+			defer wg.Done()
+			_, err := store.Update(app.ID, fields)
+			errs <- err
+		}(u)
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent Update failed: %v", err)
+		}
+	}
+
+	got, err := store.Get(app.ID)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if got.Status != "applied" {
+		t.Errorf("expected status applied, got %s", got.Status)
+	}
+	if got.Notes != "updated" {
+		t.Errorf("expected notes updated, got %s", got.Notes)
+	}
+	if got.Location != "NYC" {
+		t.Errorf("expected location NYC, got %s", got.Location)
+	}
+	if got.URL != "https://example.com" {
+		t.Errorf("expected url https://example.com, got %s", got.URL)
+	}
+	if got.SalaryMin != 100000 {
+		t.Errorf("expected salary_min 100000, got %d", got.SalaryMin)
+	}
+}
+
+func TestNewStoreInvalidPath(t *testing.T) {
+	_, err := NewStore("/nonexistent/deeply/nested/dir/db.sqlite")
+	if err == nil {
+		t.Fatal("expected error for invalid path, got nil")
 	}
 }
