@@ -43,10 +43,16 @@ func TestListApplications_Empty(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var apps []model.Application
-	json.NewDecoder(w.Body).Decode(&apps)
-	if len(apps) != 0 {
-		t.Fatalf("expected empty array, got %d items", len(apps))
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 0 {
+		t.Fatalf("expected empty data, got %d items", len(resp.Data))
+	}
+	if resp.Pagination.Total != 0 {
+		t.Fatalf("expected total 0, got %d", resp.Pagination.Total)
+	}
+	if resp.Pagination.Limit != 50 {
+		t.Fatalf("expected default limit 50, got %d", resp.Pagination.Limit)
 	}
 }
 
@@ -307,13 +313,16 @@ func TestListApplications_FilterByStatus(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var apps []model.Application
-	json.NewDecoder(w.Body).Decode(&apps)
-	if len(apps) != 1 {
-		t.Fatalf("expected 1 filtered result, got %d", len(apps))
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 1 {
+		t.Fatalf("expected 1 filtered result, got %d", len(resp.Data))
 	}
-	if apps[0].Company != "Acme" {
-		t.Errorf("expected 'Acme', got %q", apps[0].Company)
+	if resp.Data[0].Company != "Acme" {
+		t.Errorf("expected 'Acme', got %q", resp.Data[0].Company)
+	}
+	if resp.Pagination.Total != 1 {
+		t.Fatalf("expected total 1, got %d", resp.Pagination.Total)
 	}
 }
 
@@ -355,6 +364,100 @@ func TestCreateApplication_InvalidJSON(t *testing.T) {
 	_, r := setupTest(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString("not json"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_PaginationParams(t *testing.T) {
+	_, r := setupTest(t)
+
+	// Create 3 apps
+	for _, company := range []string{"A", "B", "C"} {
+		body := `{"company":"` + company + `","role":"Eng"}`
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	// Page 1: limit=2, offset=0
+	req := httptest.NewRequest(http.MethodGet, "/applications?limit=2&offset=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(resp.Data))
+	}
+	if resp.Pagination.Total != 3 {
+		t.Fatalf("expected total 3, got %d", resp.Pagination.Total)
+	}
+	if resp.Pagination.Limit != 2 {
+		t.Fatalf("expected limit 2, got %d", resp.Pagination.Limit)
+	}
+	if !resp.Pagination.HasMore {
+		t.Fatal("expected has_more=true")
+	}
+
+	// Page 2: limit=2, offset=2
+	req = httptest.NewRequest(http.MethodGet, "/applications?limit=2&offset=2", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(resp.Data))
+	}
+	if resp.Pagination.HasMore {
+		t.Fatal("expected has_more=false")
+	}
+}
+
+func TestListApplications_InvalidLimit(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?limit=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_LimitOutOfRange(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?limit=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for limit=0, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/applications?limit=501", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for limit=501, got %d", w.Code)
+	}
+}
+
+func TestListApplications_NegativeOffset(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?offset=-1", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
