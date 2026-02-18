@@ -75,6 +75,35 @@ type RecentActivity struct {
 	Last30Days int `json:"last_30_days"`
 }
 
+type ListOptions struct {
+	Status          string
+	Limit           int
+	Offset          int
+	SortBy          string
+	SortOrder       string
+	Company         string
+	Role            string
+	Location        string
+	AppliedAfter    string
+	AppliedBefore   string
+	SalaryMinGTE    int
+	SalaryMaxLTE    int
+	HasSalaryMinGTE bool
+	HasSalaryMaxLTE bool
+}
+
+var ValidSortColumns = map[string]bool{
+	"company":    true,
+	"role":       true,
+	"status":     true,
+	"salary_min": true,
+	"salary_max": true,
+	"location":   true,
+	"created_at": true,
+	"updated_at": true,
+}
+}
+
 func ValidateStatus(status string) error {
 	if status != "" && !ValidStatuses[status] {
 		return fmt.Errorf("invalid status %q, valid values: wishlist, applied, phone_screen, interview, offer, accepted, rejected, withdrawn, ghosted", status)
