@@ -230,6 +230,66 @@ func (s *Store) Update(ctx context.Context, id string, fields map[string]interfa
 	return &updated, nil
 }
 
+func (s *Store) Stats(ctx context.Context) (*model.StatsResponse, error) {
+	resp := &model.StatsResponse{
+		ByStatus: make(map[string]int),
+	}
+
+	// Pre-populate all statuses with 0
+	for status := range model.ValidStatuses {
+		resp.ByStatus[status] = 0
+	}
+
+	// Query 1: Status counts
+	rows, err := s.db.QueryContext(ctx, "SELECT status, COUNT(*) as count FROM applications GROUP BY status")
+	if err != nil {
+		return nil, fmt.Errorf("querying status counts: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scanning status count: %w", err)
+		}
+		resp.ByStatus[status] = count
+		resp.Total += count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating status counts: %w", err)
+	}
+
+	// Query 2: Salary aggregate
+	err = s.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MIN(salary_min), 0), COALESCE(MAX(salary_max), 0), COALESCE(CAST(AVG(salary_min) AS INTEGER), 0) FROM applications WHERE salary_min > 0",
+	).Scan(&resp.SalaryRange.Min, &resp.SalaryRange.Max, &resp.SalaryRange.Avg)
+	if err != nil {
+		return nil, fmt.Errorf("querying salary aggregate: %w", err)
+	}
+
+	// Query 3: Recent activity
+	now := time.Now().UTC()
+	sevenDaysAgo := now.AddDate(0, 0, -7).Format(time.RFC3339)
+	thirtyDaysAgo := now.AddDate(0, 0, -30).Format(time.RFC3339)
+
+	err = s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM applications WHERE created_at >= ?", sevenDaysAgo,
+	).Scan(&resp.RecentActivity.Last7Days)
+	if err != nil {
+		return nil, fmt.Errorf("querying 7-day activity: %w", err)
+	}
+
+	err = s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM applications WHERE created_at >= ?", thirtyDaysAgo,
+	).Scan(&resp.RecentActivity.Last30Days)
+	if err != nil {
+		return nil, fmt.Errorf("querying 30-day activity: %w", err)
+	}
+
+	return resp, nil
+}
+
 func (s *Store) Delete(ctx context.Context, id string) (bool, error) {
 	res, err := s.db.ExecContext(ctx, "DELETE FROM applications WHERE id = ?", id)
 	if err != nil {

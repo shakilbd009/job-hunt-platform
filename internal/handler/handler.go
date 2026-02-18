@@ -50,10 +50,21 @@ func requireJSON(next http.Handler) http.Handler {
 func (h *Handler) Routes(r chi.Router) {
 	r.Use(requireJSON)
 	r.Get("/applications", h.ListApplications)
+	// Must be before {id} to avoid chi matching "stats" as an ID
+	r.Get("/applications/stats", h.GetStats)
 	r.Get("/applications/{id}", h.GetApplication)
 	r.Post("/applications", h.CreateApplication)
 	r.Put("/applications/{id}", h.UpdateApplication)
 	r.Delete("/applications/{id}", h.DeleteApplication)
+}
+
+func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.store.Stats(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to get application stats")
+		return
+	}
+	respondJSON(w, http.StatusOK, stats)
 }
 
 func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {

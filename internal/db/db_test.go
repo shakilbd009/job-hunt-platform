@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/shakilbd009/job-hunt-platform/internal/model"
 )
@@ -371,4 +372,123 @@ func TestListPagination(t *testing.T) {
 	if len(apps) != 0 {
 		t.Fatalf("expected 0 apps, got %d", len(apps))
 	}
+}
+
+func TestStatsPopulated(t *testing.T) {
+	store := setupTestStore(t)
+
+	min1, max1 := 100000, 200000
+	min2, max2 := 150000, 250000
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", Status: "applied", SalaryMin: &min1, SalaryMax: &max1})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", Status: "applied", SalaryMin: &min2, SalaryMax: &max2})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", Status: "interview"})
+
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats failed: %v", err)
+	}
+
+	if stats.Total != 3 {
+		t.Fatalf("expected total 3, got %d", stats.Total)
+	}
+	if stats.ByStatus["applied"] != 2 {
+		t.Fatalf("expected 2 applied, got %d", stats.ByStatus["applied"])
+	}
+	if stats.ByStatus["interview"] != 1 {
+		t.Fatalf("expected 1 interview, got %d", stats.ByStatus["interview"])
+	}
+	if stats.ByStatus["wishlist"] != 0 {
+		t.Fatalf("expected 0 wishlist, got %d", stats.ByStatus["wishlist"])
+	}
+	if stats.SalaryRange.Min != 100000 {
+		t.Fatalf("expected salary min 100000, got %d", stats.SalaryRange.Min)
+	}
+	if stats.SalaryRange.Max != 250000 {
+		t.Fatalf("expected salary max 250000, got %d", stats.SalaryRange.Max)
+	}
+	if stats.SalaryRange.Avg != 125000 {
+		t.Fatalf("expected salary avg 125000, got %d", stats.SalaryRange.Avg)
+	}
+	// All 3 apps created "now" — should be in both 7-day and 30-day windows
+	if stats.RecentActivity.Last7Days != 3 {
+		t.Fatalf("expected 3 in last 7 days, got %d", stats.RecentActivity.Last7Days)
+	}
+	if stats.RecentActivity.Last30Days != 3 {
+		t.Fatalf("expected 3 in last 30 days, got %d", stats.RecentActivity.Last30Days)
+	}
+}
+
+func TestStatsEmpty(t *testing.T) {
+	store := setupTestStore(t)
+
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats failed: %v", err)
+	}
+
+	if stats.Total != 0 {
+		t.Fatalf("expected total 0, got %d", stats.Total)
+	}
+	if stats.SalaryRange.Min != 0 || stats.SalaryRange.Max != 0 || stats.SalaryRange.Avg != 0 {
+		t.Fatalf("expected all zeros for salary range, got min=%d max=%d avg=%d",
+			stats.SalaryRange.Min, stats.SalaryRange.Max, stats.SalaryRange.Avg)
+	}
+	if stats.RecentActivity.Last7Days != 0 || stats.RecentActivity.Last30Days != 0 {
+		t.Fatalf("expected 0 recent activity, got 7d=%d 30d=%d",
+			stats.RecentActivity.Last7Days, stats.RecentActivity.Last30Days)
+	}
+	// All 9 statuses should be present with 0
+	if len(stats.ByStatus) != len(model.ValidStatuses) {
+		t.Fatalf("expected %d statuses, got %d", len(model.ValidStatuses), len(stats.ByStatus))
+	}
+}
+
+func TestStatsZeroSalaries(t *testing.T) {
+	store := setupTestStore(t)
+
+	// Create apps with no salary data (defaults to 0)
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", Status: "applied"})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
+
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats failed: %v", err)
+	}
+
+	if stats.SalaryRange.Min != 0 || stats.SalaryRange.Max != 0 || stats.SalaryRange.Avg != 0 {
+		t.Fatalf("expected all zeros for salary range when all salaries are 0, got min=%d max=%d avg=%d",
+			stats.SalaryRange.Min, stats.SalaryRange.Max, stats.SalaryRange.Avg)
+	}
+}
+
+func TestStatsEdgeOfWindow(t *testing.T) {
+	store := setupTestStore(t)
+
+	// Insert directly with a created_at exactly 7 days ago
+	now := time.Now().UTC()
+	sevenDaysAgo := now.AddDate(0, 0, -7).Format(time.RFC3339)
+	eightDaysAgo := now.AddDate(0, 0, -8).Format(time.RFC3339)
+
+	// Manually insert rows with specific created_at timestamps
+	store.db.ExecContext(ctx,
+		"INSERT INTO applications (id, company, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"edge7", "EdgeCo7", "Eng", "applied", sevenDaysAgo, sevenDaysAgo)
+	store.db.ExecContext(ctx,
+		"INSERT INTO applications (id, company, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"edge8", "EdgeCo8", "Eng", "applied", eightDaysAgo, eightDaysAgo)
+
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats failed: %v", err)
+	}
+
+	// edge7 is exactly at the boundary (>= 7 days ago) — included in 7-day window
+	// edge8 is 8 days ago — excluded from 7-day window but included in 30-day
+	if stats.RecentActivity.Last7Days != 1 {
+		t.Fatalf("expected 1 in last 7 days (edge case), got %d", stats.RecentActivity.Last7Days)
+	}
+	if stats.RecentActivity.Last30Days != 2 {
+		t.Fatalf("expected 2 in last 30 days, got %d", stats.RecentActivity.Last30Days)
+	}
+
 }

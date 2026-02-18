@@ -57,6 +57,24 @@ func (r CreateRequest) Validate() error {
 	return nil
 }
 
+type StatsResponse struct {
+	ByStatus       map[string]int `json:"by_status"`
+	Total          int            `json:"total"`
+	SalaryRange    SalaryRange    `json:"salary_range"`
+	RecentActivity RecentActivity `json:"recent_activity"`
+}
+
+type SalaryRange struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
+	Avg int `json:"avg"`
+}
+
+type RecentActivity struct {
+	Last7Days  int `json:"last_7_days"`
+	Last30Days int `json:"last_30_days"`
+}
+
 func ValidateStatus(status string) error {
 	if status != "" && !ValidStatuses[status] {
 		return fmt.Errorf("invalid status %q, valid values: wishlist, applied, phone_screen, interview, offer, accepted, rejected, withdrawn, ghosted", status)
