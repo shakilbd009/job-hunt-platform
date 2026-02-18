@@ -177,7 +177,7 @@ func TestGetApplication_Success(t *testing.T) {
 func TestGetApplication_NotFound(t *testing.T) {
 	_, r := setupTest(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/applications/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodGet, "/applications/deadbeef", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -224,7 +224,7 @@ func TestUpdateApplication_NotFound(t *testing.T) {
 	_, r := setupTest(t)
 
 	body := `{"status":"applied"}`
-	req := httptest.NewRequest(http.MethodPut, "/applications/nonexistent", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/applications/deadbeef", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -294,7 +294,7 @@ func TestDeleteApplication_Success(t *testing.T) {
 func TestDeleteApplication_NotFound(t *testing.T) {
 	_, r := setupTest(t)
 
-	req := httptest.NewRequest(http.MethodDelete, "/applications/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/applications/deadbeef", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -664,5 +664,53 @@ func TestGetStats_ZeroSalaries(t *testing.T) {
 	if statsResp.SalaryRange.Min != 0 || statsResp.SalaryRange.Max != 0 || statsResp.SalaryRange.Avg != 0 {
 		t.Errorf("expected all salary zeros when no salary_min > 0, got min=%d max=%d avg=%d",
 			statsResp.SalaryRange.Min, statsResp.SalaryRange.Max, statsResp.SalaryRange.Avg)
+	}
+}
+
+func TestIDValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		id   string
+		want int
+	}{
+		{"valid 8-char hex", "a1b2c3d4", http.StatusNotFound},
+		{"single char", "a", http.StatusBadRequest},
+		{"too short", "abc", http.StatusBadRequest},
+		{"too long", "a1b2c3d4e5", http.StatusBadRequest},
+		{"uppercase rejected", "ABCDEFGH", http.StatusBadRequest},
+		{"non-hex chars", "ghijklmn", http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run("Get_"+tt.name, func(t *testing.T) {
+			_, r := setupTest(t)
+			req := httptest.NewRequest(http.MethodGet, "/applications/"+tt.id, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != tt.want {
+				t.Errorf("GET /applications/%s: expected %d, got %d", tt.id, tt.want, w.Code)
+			}
+		})
+
+		t.Run("Update_"+tt.name, func(t *testing.T) {
+			_, r := setupTest(t)
+			body := `{"status":"applied"}`
+			req := httptest.NewRequest(http.MethodPut, "/applications/"+tt.id, bytes.NewBufferString(body))
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != tt.want {
+				t.Errorf("PUT /applications/%s: expected %d, got %d", tt.id, tt.want, w.Code)
+			}
+		})
+
+		t.Run("Delete_"+tt.name, func(t *testing.T) {
+			_, r := setupTest(t)
+			req := httptest.NewRequest(http.MethodDelete, "/applications/"+tt.id, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != tt.want {
+				t.Errorf("DELETE /applications/%s: expected %d, got %d", tt.id, tt.want, w.Code)
+			}
+		})
 	}
 }
