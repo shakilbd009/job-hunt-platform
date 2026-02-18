@@ -44,6 +44,10 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
 func migrate(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS applications (
 		id         TEXT PRIMARY KEY,

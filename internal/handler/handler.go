@@ -47,16 +47,36 @@ func requireJSON(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Handler) Routes(r chi.Router) {
-	r.Use(requireJSON)
-	r.Get("/applications", h.ListApplications)
-	// Must be before {id} to avoid chi matching "stats" as an ID
-	r.Get("/applications/stats", h.GetStats)
-	r.Get("/applications/{id}", h.GetApplication)
-	r.Post("/applications", h.CreateApplication)
-	r.Put("/applications/{id}", h.UpdateApplication)
-	r.Delete("/applications/{id}", h.DeleteApplication)
+func (h *Handler) HealthRoutes(r chi.Router) {
+	r.Get("/health", h.HealthCheck)
 }
+
+func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	if err := h.store.Ping(r.Context()); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status": "degraded",
+			"db":     "error",
+			"detail": err.Error(),
+		})
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+		"db":     "ok",
+	})
+}
+
+func (h *Handler) Routes(r chi.Router) {
+	// Stats endpoint must be before {id} to avoid chi matching "stats" as an ID
+	r.Get("/applications/stats", h.GetStats)
+	r.Group(func(r chi.Router) {
+		r.Use(requireJSON)
+		r.Get("/applications", h.ListApplications)
+		r.Get("/applications/{id}", h.GetApplication)
+		r.Post("/applications", h.CreateApplication)
+		r.Put("/applications/{id}", h.UpdateApplication)
+		r.Delete("/applications/{id}", h.DeleteApplication)
+	})
 
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.store.Stats(r.Context())
