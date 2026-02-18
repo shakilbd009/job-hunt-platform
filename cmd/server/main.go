@@ -42,6 +42,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	h.HealthRoutes(r)
 	h.Routes(r)
 
 	srv := &http.Server{
