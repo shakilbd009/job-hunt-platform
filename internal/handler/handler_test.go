@@ -530,3 +530,117 @@ func TestCreateApplication_WrongContentType(t *testing.T) {
 		t.Fatalf("expected 415, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestGetStats_Populated(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"A","role":"Eng","status":"applied","salary_min":100000,"salary_max":150000}`,
+		`{"company":"B","role":"Eng","status":"applied","salary_min":120000,"salary_max":180000}`,
+		`{"company":"C","role":"Eng","status":"interview","salary_min":90000,"salary_max":130000}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("setup: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications/stats", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp model.StatsResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp.Total != 3 {
+		t.Errorf("expected total 3, got %d", resp.Total)
+	}
+	if resp.ByStatus["applied"] != 2 {
+		t.Errorf("expected applied=2, got %d", resp.ByStatus["applied"])
+	}
+	if resp.ByStatus["interview"] != 1 {
+		t.Errorf("expected interview=1, got %d", resp.ByStatus["interview"])
+	}
+	if resp.ByStatus["wishlist"] != 0 {
+		t.Errorf("expected wishlist=0, got %d", resp.ByStatus["wishlist"])
+	}
+	if resp.SalaryRange.Min != 90000 {
+		t.Errorf("expected salary min 90000, got %d", resp.SalaryRange.Min)
+	}
+	if resp.SalaryRange.Max != 180000 {
+		t.Errorf("expected salary max 180000, got %d", resp.SalaryRange.Max)
+	}
+	if resp.RecentActivity.Last7Days != 3 {
+		t.Errorf("expected last_7_days=3, got %d", resp.RecentActivity.Last7Days)
+	}
+	if resp.RecentActivity.Last30Days != 3 {
+		t.Errorf("expected last_30_days=3, got %d", resp.RecentActivity.Last30Days)
+	}
+}
+
+func TestGetStats_Empty(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications/stats", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp model.StatsResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp.Total != 0 {
+		t.Errorf("expected total 0, got %d", resp.Total)
+	}
+	if resp.SalaryRange.Min != 0 || resp.SalaryRange.Max != 0 || resp.SalaryRange.Avg != 0 {
+		t.Errorf("expected all salary zeros, got min=%d max=%d avg=%d",
+			resp.SalaryRange.Min, resp.SalaryRange.Max, resp.SalaryRange.Avg)
+	}
+	if resp.RecentActivity.Last7Days != 0 || resp.RecentActivity.Last30Days != 0 {
+		t.Errorf("expected zero activity, got 7d=%d 30d=%d",
+			resp.RecentActivity.Last7Days, resp.RecentActivity.Last30Days)
+	}
+	if len(resp.ByStatus) != 9 {
+		t.Errorf("expected 9 statuses, got %d", len(resp.ByStatus))
+	}
+}
+
+func TestGetStats_ZeroSalaries(t *testing.T) {
+	_, r := setupTest(t)
+
+	body := `{"company":"A","role":"Eng","status":"applied"}`
+	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	req = httptest.NewRequest(http.MethodGet, "/applications/stats", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp model.StatsResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp.Total != 1 {
+		t.Errorf("expected total 1, got %d", resp.Total)
+	}
+	if resp.SalaryRange.Min != 0 || resp.SalaryRange.Max != 0 || resp.SalaryRange.Avg != 0 {
+		t.Errorf("expected all salary zeros when no salary_min > 0, got min=%d max=%d avg=%d",
+			resp.SalaryRange.Min, resp.SalaryRange.Max, resp.SalaryRange.Avg)
+	}
+}
