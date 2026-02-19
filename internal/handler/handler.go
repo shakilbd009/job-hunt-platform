@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -67,17 +68,6 @@ func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
 
 func (h *Handler) HealthRoutes(r chi.Router) {
 	r.Get("/health", h.HealthCheck)
-}
-
-func (h *Handler) Routes(r chi.Router) {
-	r.Use(requireJSON)
-	r.Get("/applications", h.ListApplications)
-	// Must be before {id} to avoid chi matching "stats" as an ID
-	r.Get("/applications/stats", h.GetStats)
-	r.Get("/applications/{id}", h.GetApplication)
-	r.With(maxBodyMiddleware(maxBodyBytes)).Post("/applications", h.CreateApplication)
-	r.With(maxBodyMiddleware(maxBodyBytes)).Put("/applications/{id}", h.UpdateApplication)
-	r.Delete("/applications/{id}", h.DeleteApplication)
 }
 
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -154,10 +144,102 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 		offset = n
 	}
 
+	// sort_by - default "updated_at", validate against ValidSortColumns
+	sortBy := r.URL.Query().Get("sort_by")
+	if sortBy == "" {
+		sortBy = "updated_at"
+	}
+	if !model.ValidSortColumns[sortBy] {
+		respondError(w, http.StatusBadRequest, "invalid sort_by: must be one of company, role, status, salary_min, salary_max, location, created_at, updated_at")
+		return
+	}
+
+	// sort_order - default "desc", must be "asc" or "desc"
+	sortOrder := r.URL.Query().Get("sort_order")
+	if sortOrder == "" {
+		sortOrder = "desc"
+	}
+	if sortOrder != "asc" && sortOrder != "desc" {
+		respondError(w, http.StatusBadRequest, "sort_order must be asc or desc")
+		return
+	}
+
+	// String filters (no validation needed, empty = no filter)
+	company := r.URL.Query().Get("company")
+	role := r.URL.Query().Get("role")
+	location := r.URL.Query().Get("location")
+
+	// Date filters - RFC3339 format
+	appliedAfter := r.URL.Query().Get("applied_after")
+	if appliedAfter != "" {
+		if _, err := strconv.ParseInt(appliedAfter, 10, 64); err != nil {
+			// Not a Unix timestamp, try RFC3339
+			if _, err := time.Parse(time.RFC3339, appliedAfter); err != nil {
+				respondError(w, http.StatusBadRequest, "invalid applied_after: must be RFC3339 format (e.g. 2026-01-01T00:00:00Z)")
+				return
+			}
+		}
+	}
+
+	appliedBefore := r.URL.Query().Get("applied_before")
+	if appliedBefore != "" {
+		if _, err := strconv.ParseInt(appliedBefore, 10, 64); err != nil {
+			// Not a Unix timestamp, try RFC3339
+			if _, err := time.Parse(time.RFC3339, appliedBefore); err != nil {
+				respondError(w, http.StatusBadRequest, "invalid applied_before: must be RFC3339 format (e.g. 2026-01-01T00:00:00Z)")
+				return
+			}
+		}
+	}
+
+	// Salary filters - must be non-negative integers
+	hasSalaryMinGTE := false
+	salaryMinGTE := 0
+	if v := r.URL.Query().Get("salary_min_gte"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "salary_min_gte must be a non-negative integer")
+			return
+		}
+		if n < 0 {
+			respondError(w, http.StatusBadRequest, "salary_min_gte must be a non-negative integer")
+			return
+		}
+		salaryMinGTE = n
+		hasSalaryMinGTE = true
+	}
+
+	hasSalaryMaxLTE := false
+	salaryMaxLTE := 0
+	if v := r.URL.Query().Get("salary_max_lte"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "salary_max_lte must be a non-negative integer")
+			return
+		}
+		if n < 0 {
+			respondError(w, http.StatusBadRequest, "salary_max_lte must be a non-negative integer")
+			return
+		}
+		salaryMaxLTE = n
+		hasSalaryMaxLTE = true
+	}
+
 	opts := model.ListOptions{
-		Status: status,
-		Limit:  limit,
-		Offset: offset,
+		Status:          status,
+		Limit:           limit,
+		Offset:          offset,
+		SortBy:          sortBy,
+		SortOrder:       sortOrder,
+		Company:         company,
+		Role:            role,
+		Location:        location,
+		AppliedAfter:    appliedAfter,
+		AppliedBefore:   appliedBefore,
+		SalaryMinGTE:    salaryMinGTE,
+		SalaryMaxLTE:    salaryMaxLTE,
+		HasSalaryMinGTE: hasSalaryMinGTE,
+		HasSalaryMaxLTE: hasSalaryMaxLTE,
 	}
 
 	apps, err := h.store.List(r.Context(), opts)
