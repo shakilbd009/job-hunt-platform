@@ -496,7 +496,6 @@ func TestStatsEdgeOfWindow(t *testing.T) {
 
 }
 
-<<<<<<< HEAD
 // Test sorting by company ascending
 func TestListSortByCompanyAsc(t *testing.T) {
 	store := setupTestStore(t)

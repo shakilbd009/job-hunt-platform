@@ -557,7 +557,6 @@ func TestCreateApplication_WrongContentType(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestHealthCheck_Healthy(t *testing.T) {
 	_, r := setupTest(t)
 

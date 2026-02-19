@@ -69,17 +69,6 @@ func (h *Handler) HealthRoutes(r chi.Router) {
 	r.Get("/health", h.HealthCheck)
 }
 
-func (h *Handler) Routes(r chi.Router) {
-	r.Use(requireJSON)
-	r.Get("/applications", h.ListApplications)
-	// Must be before {id} to avoid chi matching "stats" as an ID
-	r.Get("/applications/stats", h.GetStats)
-	r.Get("/applications/{id}", h.GetApplication)
-	r.With(maxBodyMiddleware(maxBodyBytes)).Post("/applications", h.CreateApplication)
-	r.With(maxBodyMiddleware(maxBodyBytes)).Put("/applications/{id}", h.UpdateApplication)
-	r.Delete("/applications/{id}", h.DeleteApplication)
-}
-
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.Ping(r.Context()); err != nil {
 		respondJSON(w, http.StatusServiceUnavailable, map[string]string{
