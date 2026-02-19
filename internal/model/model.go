@@ -102,7 +102,6 @@ var ValidSortColumns = map[string]bool{
 	"created_at": true,
 	"updated_at": true,
 }
-}
 
 func ValidateStatus(status string) error {
 	if status != "" && !ValidStatuses[status] {

@@ -84,6 +84,7 @@ func (h *Handler) Routes(r chi.Router) {
 		r.Put("/applications/{id}", h.UpdateApplication)
 		r.Delete("/applications/{id}", h.DeleteApplication)
 	})
+}
 
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.store.Stats(r.Context())
@@ -131,13 +132,19 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 		offset = n
 	}
 
-	apps, err := h.store.List(r.Context(), status, limit, offset)
+	opts := model.ListOptions{
+		Status: status,
+		Limit:  limit,
+		Offset: offset,
+	}
+
+	apps, err := h.store.List(r.Context(), opts)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to list applications")
 		return
 	}
 
-	total, err := h.store.Count(r.Context(), status)
+	total, err := h.store.Count(r.Context(), opts)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to count applications")
 		return
