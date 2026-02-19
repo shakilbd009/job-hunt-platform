@@ -74,13 +74,54 @@ func generateID() string {
 	return uuid.New().String()[:8]
 }
 
-func (s *Store) Count(ctx context.Context, status string) (int, error) {
-	query := "SELECT COUNT(*) FROM applications"
+func buildWhere(opts model.ListOptions) (string, []interface{}) {
+	var conditions []string
 	var args []interface{}
 
-	if status != "" {
-		query += " WHERE status = ?"
-		args = append(args, status)
+	if opts.Status != "" {
+		conditions = append(conditions, "status = ?")
+		args = append(args, opts.Status)
+	}
+	if opts.Company != "" {
+		conditions = append(conditions, "LOWER(company) LIKE LOWER(?)")
+		args = append(args, "%"+opts.Company+"%")
+	}
+	if opts.Role != "" {
+		conditions = append(conditions, "LOWER(role) LIKE LOWER(?)")
+		args = append(args, "%"+opts.Role+"%")
+	}
+	if opts.Location != "" {
+		conditions = append(conditions, "LOWER(location) LIKE LOWER(?)")
+		args = append(args, "%"+opts.Location+"%")
+	}
+	if opts.AppliedAfter != "" {
+		conditions = append(conditions, "created_at >= ?")
+		args = append(args, opts.AppliedAfter)
+	}
+	if opts.AppliedBefore != "" {
+		conditions = append(conditions, "created_at < ?")
+		args = append(args, opts.AppliedBefore)
+	}
+	if opts.HasSalaryMinGTE {
+		conditions = append(conditions, "salary_min >= ?")
+		args = append(args, opts.SalaryMinGTE)
+	}
+	if opts.HasSalaryMaxLTE {
+		conditions = append(conditions, "salary_max <= ? AND salary_max > 0")
+		args = append(args, opts.SalaryMaxLTE)
+	}
+
+	if len(conditions) == 0 {
+		return "", nil
+	}
+	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func (s *Store) Count(ctx context.Context, opts model.ListOptions) (int, error) {
+	query := "SELECT COUNT(*) FROM applications"
+	whereClause, args := buildWhere(opts)
+	if whereClause != "" {
+		query += " " + whereClause
 	}
 
 	var count int
@@ -91,16 +132,26 @@ func (s *Store) Count(ctx context.Context, status string) (int, error) {
 	return count, nil
 }
 
-func (s *Store) List(ctx context.Context, status string, limit, offset int) ([]model.Application, error) {
+func (s *Store) List(ctx context.Context, opts model.ListOptions) ([]model.Application, error) {
 	query := "SELECT id, company, role, url, salary_min, salary_max, location, status, notes, applied_at, created_at, updated_at FROM applications"
-	var args []interface{}
-
-	if status != "" {
-		query += " WHERE status = ?"
-		args = append(args, status)
+	whereClause, args := buildWhere(opts)
+	if whereClause != "" {
+		query += " " + whereClause
 	}
-	query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+
+	// Build ORDER BY
+	sortBy := opts.SortBy
+	if sortBy == "" {
+		sortBy = "updated_at"
+	}
+	sortOrder := opts.SortOrder
+	if sortOrder == "" {
+		sortOrder = "DESC"
+	}
+	query += " ORDER BY " + sortBy + " " + sortOrder
+
+	query += " LIMIT ? OFFSET ?"
+	args = append(args, opts.Limit, opts.Offset)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {

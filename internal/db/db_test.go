@@ -115,7 +115,7 @@ func TestListAll(t *testing.T) {
 	createTestApp(t, store)
 	createTestApp(t, store)
 
-	apps, err := store.List(ctx,"", 100, 0)
+	apps, err := store.List(ctx, model.ListOptions{Limit: 100, Offset: 0})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestListAll(t *testing.T) {
 func TestListEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	apps, err := store.List(ctx,"", 100, 0)
+	apps, err := store.List(ctx, model.ListOptions{Limit: 100, Offset: 0})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestListWithStatusFilter(t *testing.T) {
 	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
 	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
 
-	apps, err := store.List(ctx,"applied", 100, 0)
+	apps, err := store.List(ctx, model.ListOptions{Status: "applied", Limit: 100, Offset: 0})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestListInvalidStatusFilter(t *testing.T) {
 	store := setupTestStore(t)
 	createTestApp(t, store)
 
-	apps, err := store.List(ctx,"nonexistent_status", 100, 0)
+	apps, err := store.List(ctx, model.ListOptions{Status: "nonexistent_status", Limit: 100, Offset: 0})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestCountAll(t *testing.T) {
 	createTestApp(t, store)
 	createTestApp(t, store)
 
-	count, err := store.Count(ctx,"")
+	count, err := store.Count(ctx, model.ListOptions{})
 	if err != nil {
 		t.Fatalf("Count failed: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestCountWithStatus(t *testing.T) {
 	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", Status: "interview"})
 	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", Status: "applied"})
 
-	count, err := store.Count(ctx,"applied")
+	count, err := store.Count(ctx, model.ListOptions{Status: "applied"})
 	if err != nil {
 		t.Fatalf("Count failed: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestCountWithStatus(t *testing.T) {
 func TestCountEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	count, err := store.Count(ctx,"")
+	count, err := store.Count(ctx, model.ListOptions{})
 	if err != nil {
 		t.Fatalf("Count failed: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	// First page
-	apps, err := store.List(ctx,"", 2, 0)
+	apps, err := store.List(ctx, model.ListOptions{Limit: 2, Offset: 0})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	// Second page
-	apps, err = store.List(ctx,"", 2, 2)
+	apps, err = store.List(ctx, model.ListOptions{Limit: 2, Offset: 2})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	// Last page (partial)
-	apps, err = store.List(ctx,"", 2, 4)
+	apps, err = store.List(ctx, model.ListOptions{Limit: 2, Offset: 4})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -365,7 +365,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	// Beyond range
-	apps, err = store.List(ctx,"", 2, 10)
+	apps, err = store.List(ctx, model.ListOptions{Limit: 2, Offset: 10})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -491,4 +491,275 @@ func TestStatsEdgeOfWindow(t *testing.T) {
 		t.Fatalf("expected 2 in last 30 days, got %d", stats.RecentActivity.Last30Days)
 	}
 
+}
+
+// Test sorting by company ascending
+func TestListSortByCompanyAsc(t *testing.T) {
+	store := setupTestStore(t)
+
+	store.Create(ctx, model.CreateRequest{Company: "Zebra", Role: "R"})
+	store.Create(ctx, model.CreateRequest{Company: "Alpha", Role: "R"})
+	store.Create(ctx, model.CreateRequest{Company: "Beta", Role: "R"})
+
+	apps, err := store.List(ctx, model.ListOptions{SortBy: "company", SortOrder: "ASC", Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 3 {
+		t.Fatalf("expected 3 apps, got %d", len(apps))
+	}
+	if apps[0].Company != "Alpha" || apps[1].Company != "Beta" || apps[2].Company != "Zebra" {
+		t.Fatalf("expected sorted order Alpha, Beta, Zebra, got %s, %s, %s", apps[0].Company, apps[1].Company, apps[2].Company)
+	}
+}
+
+// Test sorting by salary_min descending
+func TestListSortBySalaryMinDesc(t *testing.T) {
+	store := setupTestStore(t)
+
+	min1, max1 := 100000, 150000
+	min2, max2 := 200000, 250000
+	min3, max3 := 50000, 100000
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", SalaryMin: &min1, SalaryMax: &max1})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", SalaryMin: &min2, SalaryMax: &max2})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", SalaryMin: &min3, SalaryMax: &max3})
+
+	apps, err := store.List(ctx, model.ListOptions{SortBy: "salary_min", SortOrder: "DESC", Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 3 {
+		t.Fatalf("expected 3 apps, got %d", len(apps))
+	}
+	if apps[0].SalaryMin != 200000 || apps[1].SalaryMin != 100000 || apps[2].SalaryMin != 50000 {
+		t.Fatalf("expected sorted order 200000, 100000, 50000, got %d, %d, %d", apps[0].SalaryMin, apps[1].SalaryMin, apps[2].SalaryMin)
+	}
+}
+
+// Test filter by company substring (case-insensitive)
+func TestListFilterByCompany(t *testing.T) {
+	store := setupTestStore(t)
+
+	store.Create(ctx, model.CreateRequest{Company: "Acme Corp", Role: "R"})
+	store.Create(ctx, model.CreateRequest{Company: "Acme Industries", Role: "R"})
+	store.Create(ctx, model.CreateRequest{Company: "Beta Corp", Role: "R"})
+
+	apps, err := store.List(ctx, model.ListOptions{Company: "acme", Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps matching 'acme', got %d", len(apps))
+	}
+
+	// Test case insensitivity
+	apps, err = store.List(ctx, model.ListOptions{Company: "ACME", Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps matching 'ACME' (case insensitive), got %d", len(apps))
+	}
+}
+
+// Test filter by location substring (case-insensitive)
+func TestListFilterByLocation(t *testing.T) {
+	store := setupTestStore(t)
+
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", Location: "New York"})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", Location: "New Jersey"})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", Location: "San Francisco"})
+
+	apps, err := store.List(ctx, model.ListOptions{Location: "new", Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps matching location 'new', got %d", len(apps))
+	}
+}
+
+// Test filter by role substring
+func TestListFilterByRole(t *testing.T) {
+	store := setupTestStore(t)
+
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "Senior Engineer"})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "Junior Engineer"})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "Product Manager"})
+
+	apps, err := store.List(ctx, model.ListOptions{Role: "engineer", Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps matching role 'engineer', got %d", len(apps))
+	}
+}
+
+// Test date range filter (applied_after, applied_before using created_at)
+func TestListFilterByDateRange(t *testing.T) {
+	store := setupTestStore(t)
+
+	// Insert with specific timestamps
+	now := time.Now().UTC()
+	day1 := now.AddDate(0, 0, -5).Format(time.RFC3339)
+	day2 := now.AddDate(0, 0, -3).Format(time.RFC3339)
+	day3 := now.AddDate(0, 0, -1).Format(time.RFC3339)
+
+	store.db.ExecContext(ctx,
+		"INSERT INTO applications (id, company, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"d1", "Day1", "R", "applied", day1, day1)
+	store.db.ExecContext(ctx,
+		"INSERT INTO applications (id, company, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"d2", "Day2", "R", "applied", day2, day2)
+	store.db.ExecContext(ctx,
+		"INSERT INTO applications (id, company, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"d3", "Day3", "R", "applied", day3, day3)
+
+	// Filter after day 4 ago (should get day1, day2, day3)
+	after := now.AddDate(0, 0, -6).Format(time.RFC3339)
+	apps, err := store.List(ctx, model.ListOptions{AppliedAfter: after, Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 3 {
+		t.Fatalf("expected 3 apps after %s, got %d", after, len(apps))
+	}
+
+	// Filter before day 2 ago (should get day2, day3)
+	before := now.AddDate(0, 0, -2).Format(time.RFC3339)
+	apps, err = store.List(ctx, model.ListOptions{AppliedBefore: before, Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps before %s, got %d", before, len(apps))
+	}
+
+	// Filter between day 4 ago and day 2 ago (should get day2 only)
+	after = now.AddDate(0, 0, -4).Format(time.RFC3339)
+	before = now.AddDate(0, 0, -2).Format(time.RFC3339)
+	apps, err = store.List(ctx, model.ListOptions{AppliedAfter: after, AppliedBefore: before, Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 1 {
+		t.Fatalf("expected 1 app between %s and %s, got %d", after, before, len(apps))
+	}
+	if apps[0].Company != "Day2" {
+		t.Fatalf("expected Day2, got %s", apps[0].Company)
+	}
+}
+
+// Test salary_min_gte filter
+func TestListFilterBySalaryMinGTE(t *testing.T) {
+	store := setupTestStore(t)
+
+	min1, max1 := 50000, 100000
+	min2, max2 := 100000, 150000
+	min3, max3 := 150000, 200000
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", SalaryMin: &min1, SalaryMax: &max1})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", SalaryMin: &min2, SalaryMax: &max2})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", SalaryMin: &min3, SalaryMax: &max3})
+
+	apps, err := store.List(ctx, model.ListOptions{HasSalaryMinGTE: true, SalaryMinGTE: 100000, Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps with salary_min >= 100000, got %d", len(apps))
+	}
+}
+
+// Test salary_max_lte filter
+func TestListFilterBySalaryMaxLTE(t *testing.T) {
+	store := setupTestStore(t)
+
+	min1, max1 := 50000, 100000
+	min2, max2 := 100000, 150000
+	min3, max3 := 150000, 200000
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", SalaryMin: &min1, SalaryMax: &max1})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", SalaryMin: &min2, SalaryMax: &max2})
+	store.Create(ctx, model.CreateRequest{Company: "C", Role: "R", SalaryMin: &min3, SalaryMax: &max3})
+
+	apps, err := store.List(ctx, model.ListOptions{HasSalaryMaxLTE: true, SalaryMaxLTE: 150000, Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 apps with salary_max <= 150000, got %d", len(apps))
+	}
+}
+
+// Test salary_max_lte=0 returns nothing (edge case: salary_max > 0 required)
+func TestListFilterBySalaryMaxLTEZero(t *testing.T) {
+	store := setupTestStore(t)
+
+	min1, max1 := 50000, 100000
+	min2, max2 := 100000, 0 // salary_max is 0
+	store.Create(ctx, model.CreateRequest{Company: "A", Role: "R", SalaryMin: &min1, SalaryMax: &max1})
+	store.Create(ctx, model.CreateRequest{Company: "B", Role: "R", SalaryMin: &min2, SalaryMax: &max2})
+
+	// Even though we set salary_max_lte=0, the condition requires salary_max > 0
+	// So nothing should match
+	apps, err := store.List(ctx, model.ListOptions{HasSalaryMaxLTE: true, SalaryMaxLTE: 0, Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 0 {
+		t.Fatalf("expected 0 apps with salary_max <= 0 (edge case), got %d", len(apps))
+	}
+}
+
+// Test all filters combined
+func TestListAllFiltersCombined(t *testing.T) {
+	store := setupTestStore(t)
+
+	min1, max1 := 100000, 150000
+	min2, max2 := 200000, 250000
+	// This one matches all criteria
+	store.Create(ctx, model.CreateRequest{Company: "Acme Corp", Role: "Senior Engineer", Location: "New York", Status: "applied", SalaryMin: &min1, SalaryMax: &max1})
+	// Different status
+	store.Create(ctx, model.CreateRequest{Company: "Acme Inc", Role: "Senior Engineer", Location: "New York", Status: "interview", SalaryMin: &min1, SalaryMax: &max1})
+	// Different company
+	store.Create(ctx, model.CreateRequest{Company: "Beta Corp", Role: "Senior Engineer", Location: "New York", Status: "applied", SalaryMin: &min1, SalaryMax: &max1})
+	// Different role
+	store.Create(ctx, model.CreateRequest{Company: "Acme Corp", Role: "Junior Engineer", Location: "New York", Status: "applied", SalaryMin: &min1, SalaryMax: &max1})
+	// Different location
+	store.Create(ctx, model.CreateRequest{Company: "Acme Corp", Role: "Senior Engineer", Location: "San Francisco", Status: "applied", SalaryMin: &min1, SalaryMax: &max1})
+	// Different salary
+	store.Create(ctx, model.CreateRequest{Company: "Acme Corp", Role: "Senior Engineer", Location: "New York", Status: "applied", SalaryMin: &min2, SalaryMax: &max2})
+
+	opts := model.ListOptions{
+		Status:          "applied",
+		Company:         "acme",
+		Role:            "senior",
+		Location:        "new york",
+		HasSalaryMinGTE: true,
+		SalaryMinGTE:    50000,
+		HasSalaryMaxLTE: true,
+		SalaryMaxLTE:    200000,
+		Limit:           10,
+		Offset:          0,
+	}
+
+	apps, err := store.List(ctx, opts)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(apps) != 1 {
+		t.Fatalf("expected 1 app matching all filters, got %d", len(apps))
+	}
+	if apps[0].Company != "Acme Corp" {
+		t.Fatalf("expected Acme Corp, got %s", apps[0].Company)
+	}
+
+	// Also test Count with same filters
+	count, err := store.Count(ctx, opts)
+	if err != nil {
+		t.Fatalf("Count failed: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected count 1, got %d", count)
+	}
 }
