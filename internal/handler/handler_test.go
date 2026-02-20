@@ -774,3 +774,334 @@ func TestIDValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestListApplications_SortByCompanyAsc(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"Zebra Corp","role":"Eng"}`,
+		`{"company":"Alpha Inc","role":"Eng"}`,
+		`{"company":"Beta LLC","role":"Eng"}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?sort_by=company&sort_order=asc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(resp.Data))
+	}
+	if resp.Data[0].Company != "Alpha Inc" || resp.Data[1].Company != "Beta LLC" || resp.Data[2].Company != "Zebra Corp" {
+		t.Errorf("unexpected sort order: %v", resp.Data)
+	}
+}
+
+func TestListApplications_SortBySalaryMinDesc(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"Low","role":"Eng","salary_min":50000}`,
+		`{"company":"High","role":"Eng","salary_min":200000}`,
+		`{"company":"Mid","role":"Eng","salary_min":100000}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?sort_by=salary_min&sort_order=desc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(resp.Data))
+	}
+	if resp.Data[0].Company != "High" || resp.Data[1].Company != "Mid" || resp.Data[2].Company != "Low" {
+		t.Errorf("unexpected sort order: %v", resp.Data)
+	}
+}
+
+func TestListApplications_FilterByCompany(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"Google","role":"Eng"}`,
+		`{"company":"Amazon","role":"Eng"}`,
+		`{"company":"Google Cloud","role":"Eng"}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?company=goo", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 2 || resp.Pagination.Total != 2 {
+		t.Fatalf("expected 2 items, got %d (total %d)", len(resp.Data), resp.Pagination.Total)
+	}
+}
+
+func TestListApplications_FilterByRole(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"A","role":"Backend Engineer"}`,
+		`{"company":"B","role":"Frontend Engineer"}`,
+		`{"company":"C","role":"Product Manager"}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?role=engineer", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(resp.Data))
+	}
+}
+
+func TestListApplications_FilterByLocation(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"A","role":"Eng","location":"San Francisco, CA"}`,
+		`{"company":"B","role":"Eng","location":"New York, NY"}`,
+		`{"company":"C","role":"Eng","location":"San Diego, CA"}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?location=san", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(resp.Data))
+	}
+}
+
+func TestListApplications_FilterBySalaryMinGTE(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"Low","role":"Eng","salary_min":50000}`,
+		`{"company":"High","role":"Eng","salary_min":150000}`,
+		`{"company":"Mid","role":"Eng","salary_min":100000}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?salary_min_gte=100000", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 2 || resp.Pagination.Total != 2 {
+		t.Fatalf("expected 2 items, got %d (total %d)", len(resp.Data), resp.Pagination.Total)
+	}
+}
+
+func TestListApplications_FilterBySalaryMaxLTE(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"Low","role":"Eng","salary_max":50000}`,
+		`{"company":"High","role":"Eng","salary_max":200000}`,
+		`{"company":"Mid","role":"Eng","salary_max":150000}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?salary_max_lte=150000", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(resp.Data))
+	}
+}
+
+func TestListApplications_CombinedFilters(t *testing.T) {
+	_, r := setupTest(t)
+
+	apps := []string{
+		`{"company":"Google","role":"Backend Engineer","status":"applied","salary_min":150000}`,
+		`{"company":"Google","role":"Frontend Engineer","status":"applied","salary_min":120000}`,
+		`{"company":"Amazon","role":"Backend Engineer","status":"interview","salary_min":160000}`,
+		`{"company":"Meta","role":"Backend Engineer","status":"applied","salary_min":140000}`,
+	}
+	for _, body := range apps {
+		req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?status=applied&role=engineer&sort_by=salary_min&sort_order=desc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp handler.PaginatedResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Data) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(resp.Data))
+	}
+}
+
+func TestListApplications_InvalidSortBy(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?sort_by=invalid_column", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_InvalidSortOrder(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?sort_order=invalid", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_InvalidDateFormat(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?applied_after=not-a-date", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_InvalidSalaryMinGTE(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?salary_min_gte=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_NegativeSalaryMinGTE(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?salary_min_gte=-100", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_InvalidSalaryMaxLTE(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?salary_max_lte=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListApplications_NegativeSalaryMaxLTE(t *testing.T) {
+	_, r := setupTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/applications?salary_max_lte=-100", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
