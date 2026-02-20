@@ -89,6 +89,7 @@ func (h *Handler) Routes(r chi.Router) {
 	// Stats endpoint must be before {id} to avoid chi matching "stats" as an ID
 	r.Get("/applications/stats", h.GetStats)
 	r.Group(func(r chi.Router) {
+		r.Use(maxBodyMiddleware(maxBodyBytes))
 		r.Use(requireJSON)
 		r.Get("/applications", h.ListApplications)
 		r.Get("/applications/{id}", h.GetApplication)

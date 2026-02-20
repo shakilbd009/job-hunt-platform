@@ -595,6 +595,7 @@ func TestEmptyJSONBody(t *testing.T) {
 	_, r := setupTest(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -754,6 +755,7 @@ func TestIDValidation(t *testing.T) {
 			_, r := setupTest(t)
 			body := `{"status":"applied"}`
 			req := httptest.NewRequest(http.MethodPut, "/applications/"+tt.id, bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 			if w.Code != tt.want {
